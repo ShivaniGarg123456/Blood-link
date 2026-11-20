@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,14 +25,21 @@ class DonorForm(BaseModel):
     name: str = Field(min_length=2)
     state: str
     city: str
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
     age: int = Field(ge=1, le=120)
     sex: str                      # male / female
     weight_kg: float = Field(gt=0)
     blood_group: str              # e.g. B-
-    conditions: List[str] = []    # category names, e.g. ["fever"]
+    # Used only to run the rules. NOT saved.
+    conditions: List[str] = []
     last_donation_date: Optional[date] = None
+    consent: bool                 # must be true
+
+
+class LocationUpdate(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 def donor_to_dict(d: Donor) -> dict:
@@ -47,7 +54,7 @@ def donor_to_dict(d: Donor) -> dict:
         "sex": d.sex,
         "weight_kg": d.weight_kg,
         "blood_group": d.blood_group,
-        "conditions": [c for c in d.conditions.split(",") if c],
+        "component": d.component,
         "last_donation_date": d.last_donation_date.isoformat() if d.last_donation_date else None,
         "status": d.status,
         "reason": d.reason,
@@ -62,6 +69,12 @@ def register_donor(
     db: Session = Depends(get_db),
 ):
     """Create a donor profile, or update it if this phone already registered."""
+    if not form.consent:
+        raise HTTPException(
+            status_code=400,
+            detail="Consent is required to register as a donor",
+        )
+
     sex = form.sex.strip().lower()
     group = form.blood_group.strip().upper()
 
@@ -86,10 +99,12 @@ def register_donor(
     donor.sex = sex
     donor.weight_kg = form.weight_kg
     donor.blood_group = group
-    donor.conditions = ",".join(conditions)
+    donor.component = "whole_blood"
     donor.last_donation_date = form.last_donation_date
+    if donor.consent_given_at is None:
+        donor.consent_given_at = datetime.utcnow()
 
-    # Run the fixed eligibility rules
+    # Run the fixed eligibility rules. Conditions are used here and then discarded.
     result = check_eligibility(
         form.age, form.weight_kg, sex, form.last_donation_date, conditions
     )
@@ -123,3 +138,20 @@ def my_profile(
         db.refresh(donor)
 
     return donor_to_dict(donor)
+
+
+@router.put("/me/location")
+def update_location(
+    body: LocationUpdate,
+    phone: str = Depends(get_current_phone),
+    db: Session = Depends(get_db),
+):
+    """Donors move. The app calls this to refresh the saved location."""
+    donor = db.query(Donor).filter(Donor.phone == phone).first()
+    if donor is None:
+        raise HTTPException(status_code=404, detail="Not registered yet")
+
+    donor.latitude = body.latitude
+    donor.longitude = body.longitude
+    db.commit()
+    return {"message": "Location updated"}

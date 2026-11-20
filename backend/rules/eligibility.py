@@ -53,9 +53,9 @@ def check_eligibility(age, weight_kg, sex, last_donation_date=None,
 
     for c in conditions:
         if c in PERMANENT_CONDITIONS:
-            return _result("not_eligible",
-                           f"You can't donate because of {PERMANENT_CONDITIONS[c]}.")
-
+                        return _result("not_eligible",
+                           "You can't donate because of a medical condition. "
+                           "Please talk to a doctor.")
     # Find the latest date the donor becomes eligible again
     wait_until = None
     reason = ""
