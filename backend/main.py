@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
 import models  # noqa: F401
-from routes import auth, donors
+from routes import auth, donors, blood_requests, donor_alerts
 
 Base.metadata.create_all(bind=engine)
 
@@ -18,6 +18,8 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(donors.router)
+app.include_router(donor_alerts.router)
+app.include_router(blood_requests.router)
 
 
 @app.get("/")

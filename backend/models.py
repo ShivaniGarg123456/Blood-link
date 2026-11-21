@@ -55,6 +55,8 @@ class Alert(Base):
     request_id = Column(Integer, ForeignKey("requests.id"), nullable=False)
     donor_id = Column(Integer, ForeignKey("donors.id"), nullable=False)
     wave_radius_km = Column(Integer, default=15)
+    distance_km = Column(Float, nullable=True)       # donor's distance from the hospital
+    responded_at = Column(DateTime, nullable=True)   # when the donor accepted or declined
     sent_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
     # pending / accepted / arrived / no_show / declined / expired
