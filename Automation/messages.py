@@ -81,3 +81,27 @@ def describe_accept_result(result, lang="en"):
         n = result.get("seconds_to_confirm")
         return render("tentative_wait", lang) if n is None else render("tentative", lang, n=n)
     return result.get("message", "Something went wrong.")
+
+
+# --- added for the database-based backend ---
+TEXT["closed"] = {
+    "en": "This alert is no longer open. Thank you!",
+    "hi": "यह अलर्ट अब खुला नहीं है। धन्यवाद!"}
+TEXT["language_set"] = {"en": "Language set to English.", "hi": "भाषा हिंदी कर दी गई है।"}
+
+
+def describe_response(view, lang="en", confirm_seconds=15):
+    """One plain line for the state of a donor's alert. `view` is a dict with the key `response`."""
+    r = view.get("response")
+    if r in ("confirmed", "arrived"):
+        return render("confirmed_donor", lang, receiver_name=view.get("receiver_name", ""),
+                      receiver_phone=view.get("receiver_phone", ""), hospital=view.get("hospital", ""))
+    if r == "standby":
+        return render("standby", lang)
+    if r == "accepted":
+        return render("tentative", lang, n=confirm_seconds)
+    if r == "declined":
+        return render("declined", lang)
+    if r in ("expired", "cancelled", "no_show"):
+        return render("closed", lang)
+    return view.get("message", "")
