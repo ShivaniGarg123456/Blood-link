@@ -1,13 +1,26 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
 import models  # noqa: F401
+import scheduler
 from routes import auth, donors, blood_requests, donor_alerts
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="BloodLink API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start the scheduler when the server starts, stop it when the server stops
+    task = asyncio.create_task(scheduler.run_forever())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="BloodLink API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
