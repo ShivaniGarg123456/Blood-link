@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 
 from config import WAVE_RADII_KM
 from database import get_db
-from models import Alert, BloodRequest
+from models import Alert, BloodRequest, Donor
 from rules.compatibility import COMPATIBLE_DONORS
 from security import get_current_phone
+from selection import mark_arrived, mark_no_show, resolve_request
 from waves import send_wave
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
@@ -20,6 +21,24 @@ class RequestForm(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     urgency: str = "high"                 # critical / high / normal
+
+
+def _get_my_request(db: Session, request_id: int, phone: str) -> BloodRequest:
+    req = db.query(BloodRequest).filter(BloodRequest.id == request_id).first()
+    if req is None or req.receiver_phone != phone:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return req
+
+
+def _get_request_alert(db: Session, req: BloodRequest, alert_id: int) -> Alert:
+    alert = (
+        db.query(Alert)
+        .filter(Alert.id == alert_id, Alert.request_id == req.id)
+        .first()
+    )
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found for this request")
+    return alert
 
 
 @router.post("")
@@ -72,24 +91,107 @@ def request_status(
     phone: str = Depends(get_current_phone),
     db: Session = Depends(get_db),
 ):
-    """Live status for the receiver's screen."""
-    req = db.query(BloodRequest).filter(BloodRequest.id == request_id).first()
-    if req is None or req.receiver_phone != phone:
-        raise HTTPException(status_code=404, detail="Request not found")
+    """Live dashboard for the receiver."""
+    req = _get_my_request(db, request_id, phone)
+
+    # Checking the status also moves things forward (the 15 second wait)
+    resolve_request(db, req)
+    db.refresh(req)
 
     alerts = db.query(Alert).filter(Alert.request_id == req.id).all()
     counts = {}
     for a in alerts:
         counts[a.response] = counts.get(a.response, 0) + 1
 
+    # Privacy: donor name and phone only for confirmed donors
+    confirmed = []
+    for a in alerts:
+        if a.response in ("confirmed", "arrived"):
+            donor = db.query(Donor).filter(Donor.id == a.donor_id).first()
+            confirmed.append({
+                "alert_id": a.id,
+                "name": donor.name,
+                "phone": donor.phone,
+                "blood_group": donor.blood_group,
+                "distance_km": round(a.distance_km, 1) if a.distance_km is not None else None,
+                "response": a.response,
+            })
+    confirmed.sort(key=lambda c: c["distance_km"] if c["distance_km"] is not None else 0)
+
     return {
         "request_id": req.id,
         "status": req.status,
+        "still_searching": req.status == "open",
         "blood_group": req.blood_group,
         "hospital": req.hospital,
         "units_needed": req.units_needed,
-        "units_accepted": req.units_accepted,
+        "units_found": req.units_accepted,
         "radius_km": req.current_radius_km,
         "total_alerted": len(alerts),
         "alerts_by_response": counts,
+        "confirmed_donors": confirmed,
+    }
+
+
+@router.post("/{request_id}/close")
+def close_request(
+    request_id: int,
+    phone: str = Depends(get_current_phone),
+    db: Session = Depends(get_db),
+):
+    """The receiver found blood, or no longer needs it. The search stops."""
+    req = _get_my_request(db, request_id, phone)
+    if req.status == "closed":
+        return {"message": "Request already closed", "status": "closed"}
+
+    alerts = db.query(Alert).filter(Alert.request_id == req.id).all()
+    for a in alerts:
+        if a.response == "pending":
+            a.response = "cancelled"
+        elif a.response == "accepted":
+            a.response = "standby"   # "need fulfilled, thank you"
+
+    req.status = "closed"
+    db.commit()
+    return {"message": "Request closed. Thank you!", "status": "closed"}
+
+
+@router.post("/{request_id}/alerts/{alert_id}/arrived")
+def donor_arrived(
+    request_id: int,
+    alert_id: int,
+    phone: str = Depends(get_current_phone),
+    db: Session = Depends(get_db),
+):
+    """The confirmed donor reached the hospital."""
+    req = _get_my_request(db, request_id, phone)
+    alert = _get_request_alert(db, req, alert_id)
+    if alert.response != "confirmed":
+        raise HTTPException(status_code=409, detail="Only a confirmed donor can be marked as arrived")
+    mark_arrived(db, alert)
+    return {"message": "Donor marked as arrived", "alert_id": alert.id}
+
+
+@router.post("/{request_id}/alerts/{alert_id}/no-show")
+def donor_no_show(
+    request_id: int,
+    alert_id: int,
+    phone: str = Depends(get_current_phone),
+    db: Session = Depends(get_db),
+):
+    """The confirmed donor did not come. Give the unit back and look again."""
+    req = _get_my_request(db, request_id, phone)
+    alert = _get_request_alert(db, req, alert_id)
+    if alert.response not in ("confirmed", "arrived"):
+        raise HTTPException(status_code=409, detail="Only a confirmed donor can be marked as no-show")
+    if req.status == "closed":
+        raise HTTPException(status_code=409, detail="This request is closed")
+
+    mark_no_show(db, req, alert)
+    db.refresh(req)
+    return {
+        "message": "Donor marked as no-show. We are looking for another donor.",
+        "status": req.status,
+        "units_found": req.units_accepted,
+        "units_needed": req.units_needed,
     }

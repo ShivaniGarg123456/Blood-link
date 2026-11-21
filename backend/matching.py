@@ -21,9 +21,14 @@ def find_donors_for_wave(db: Session, request: BloodRequest, radius_km: int):
     """
     groups = compatible_donors(request.blood_group)
 
+        # Donors whose alert was only cancelled (the need was fulfilled before they
+    # could answer) are allowed to be alerted again. Everyone else is skipped,
+    # so nobody is spammed twice.
     already_alerted = {
         row[0]
-        for row in db.query(Alert.donor_id).filter(Alert.request_id == request.id).all()
+        for row in db.query(Alert.donor_id)
+        .filter(Alert.request_id == request.id, Alert.response != "cancelled")
+        .all()
     }
 
     candidates = (
