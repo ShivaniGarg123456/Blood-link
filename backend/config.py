@@ -15,6 +15,11 @@ WAVE_SECONDS = int(os.getenv("WAVE_SECONDS", "180"))
 CONFIRM_WINDOW_SECONDS = int(os.getenv("CONFIRM_WINDOW_SECONDS", "15"))
 
 
+# A request that is still open after this many hours is closed automatically,
+# so donors who register much later are not alerted for an old request.
+REQUEST_MAX_HOURS = int(os.getenv("REQUEST_MAX_HOURS", "24"))
+
+
 def next_radius(current_km: int):
     """Return the next radius in the list.
 
