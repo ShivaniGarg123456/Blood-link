@@ -61,3 +61,5 @@ class Alert(Base):
     expires_at = Column(DateTime, nullable=False)
     # pending / accepted / arrived / no_show / declined / expired
     response = Column(String, default="pending")
+    progress = Column(String, nullable=True)         # on_the_way / arrived (donor's own updates)
+    progress_at = Column(DateTime, nullable=True)    # when the donor last updated

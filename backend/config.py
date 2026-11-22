@@ -19,6 +19,9 @@ CONFIRM_WINDOW_SECONDS = int(os.getenv("CONFIRM_WINDOW_SECONDS", "15"))
 # so donors who register much later are not alerted for an old request.
 REQUEST_MAX_HOURS = int(os.getenv("REQUEST_MAX_HOURS", "24"))
 
+# A donor who fails the hospital checkup is paused for this many days
+CHECKUP_FAIL_PAUSE_DAYS = int(os.getenv("CHECKUP_FAIL_PAUSE_DAYS", "7"))
+
 
 def next_radius(current_km: int):
     """Return the next radius in the list.

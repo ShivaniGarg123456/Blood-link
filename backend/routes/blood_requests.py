@@ -7,10 +7,13 @@ from database import get_db
 from models import Alert, BloodRequest, Donor
 from rules.compatibility import COMPATIBLE_DONORS, COMPONENTS
 from security import get_current_phone
-from selection import mark_arrived, mark_no_show, resolve_request
+from selection import mark_checkup_failed, mark_donated, mark_no_show, resolve_request
 from waves import send_wave
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
+
+# Donors the receiver is allowed to see (confirmed, or already helped)
+HELPER_STATES = ("confirmed", "arrived", "donated")
 
 
 class RequestForm(BaseModel):
@@ -97,8 +100,8 @@ def my_requests(
 ):
     """All requests made by this receiver, newest first (history screen).
 
-    Each request lists the donors who helped (confirmed or arrived), so the
-    receiver can contact them in future. Other donors are never shown.
+    Each request lists the donors who helped (confirmed, arrived or donated),
+    so the receiver can contact them in future. Other donors are never shown.
     """
     requests = (
         db.query(BloodRequest)
@@ -114,7 +117,7 @@ def my_requests(
             db.query(Alert)
             .filter(
                 Alert.request_id.in_(request_ids),
-                Alert.response.in_(("confirmed", "arrived")),
+                Alert.response.in_(HELPER_STATES),
             )
             .all()
         )
@@ -127,7 +130,7 @@ def my_requests(
                 "phone": donor.phone,
                 "blood_group": donor.blood_group,
                 "city": donor.city,
-                "donated": a.response == "arrived",
+                "donated": a.response == "donated",
             })
 
     return [
@@ -170,8 +173,10 @@ def request_status(
     # Privacy: donor name and phone only for confirmed donors
     confirmed = []
     for a in alerts:
-        if a.response in ("confirmed", "arrived"):
+        if a.response in HELPER_STATES:
             donor = db.query(Donor).filter(Donor.id == a.donor_id).first()
+            if donor is None:
+                continue
             confirmed.append({
                 "alert_id": a.id,
                 "name": donor.name,
@@ -179,6 +184,7 @@ def request_status(
                 "blood_group": donor.blood_group,
                 "distance_km": round(a.distance_km, 1) if a.distance_km is not None else None,
                 "response": a.response,
+                "progress": a.progress,
             })
     confirmed.sort(key=lambda c: c["distance_km"] if c["distance_km"] is not None else 0)
 
@@ -204,7 +210,7 @@ def close_request(
     phone: str = Depends(get_current_phone),
     db: Session = Depends(get_db),
 ):
-    """The receiver found blood, or no longer needs it. The search stops."""
+    """The receiver found blood elsewhere, or no longer needs it. The search stops."""
     req = _get_my_request(db, request_id, phone)
     if req.status == "closed":
         return {"message": "Request already closed", "status": "closed"}
@@ -221,20 +227,67 @@ def close_request(
     return {"message": "Request closed. Thank you!", "status": "closed"}
 
 
-@router.post("/{request_id}/alerts/{alert_id}/arrived")
-def donor_arrived(
+@router.post("/{request_id}/alerts/{alert_id}/donated")
+def donor_donated(
     request_id: int,
     alert_id: int,
     phone: str = Depends(get_current_phone),
     db: Session = Depends(get_db),
 ):
-    """The confirmed donor reached the hospital."""
+    """The receiver pressed "I got blood". The donation is complete.
+
+    The donor's last donation date is saved and the donor is paused for the
+    waiting period. When every unit is donated, the request closes.
+    """
     req = _get_my_request(db, request_id, phone)
     alert = _get_request_alert(db, req, alert_id)
-    if alert.response != "confirmed":
-        raise HTTPException(status_code=409, detail="Only a confirmed donor can be marked as arrived")
-    mark_arrived(db, alert)
-    return {"message": "Donor marked as arrived", "alert_id": alert.id}
+    if alert.response not in ("confirmed", "arrived"):
+        raise HTTPException(
+            status_code=409,
+            detail="Only a confirmed donor can be marked as donated",
+        )
+
+    result = mark_donated(db, req, alert)
+    db.refresh(req)
+    return {
+        "message": "Thank you! The donation is recorded.",
+        "request_status": req.status,
+        "units_donated": result["donated"],
+        "units_needed": req.units_needed,
+        "request_closed": result["closed"],
+    }
+
+@router.post("/{request_id}/alerts/{alert_id}/checkup-failed")
+def donor_checkup_failed(
+    request_id: int,
+    alert_id: int,
+    phone: str = Depends(get_current_phone),
+    db: Session = Depends(get_db),
+):
+    """The donor reached the hospital but failed the medical checkup.
+
+    No donation happened, so the donor's last donation date is not changed.
+    The donor is paused for a few days, the unit is given back, and the
+    nearest backup donor is confirmed. If there is none, the search continues.
+    """
+    req = _get_my_request(db, request_id, phone)
+    alert = _get_request_alert(db, req, alert_id)
+    if alert.response not in ("confirmed", "arrived"):
+        raise HTTPException(
+            status_code=409,
+            detail="Only a confirmed donor can be marked as checkup failed",
+        )
+    if req.status == "closed":
+        raise HTTPException(status_code=409, detail="This request is closed")
+
+    mark_checkup_failed(db, req, alert)
+    db.refresh(req)
+    return {
+        "message": "Marked as checkup failed. We are looking for another donor.",
+        "request_status": req.status,
+        "units_found": req.units_accepted,
+        "units_needed": req.units_needed,
+    }
 
 
 @router.post("/{request_id}/alerts/{alert_id}/no-show")
