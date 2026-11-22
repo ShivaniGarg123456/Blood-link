@@ -19,7 +19,7 @@ def find_donors_for_wave(db: Session, request: BloodRequest, radius_km: int):
       so growing the radius never alerts the same person twice
     - the receiver is never alerted about their own request
     """
-    groups = compatible_donors(request.blood_group)
+    groups = compatible_donors(request.blood_group, request.component)
 
         # Donors whose alert was only cancelled (the need was fulfilled before they
     # could answer) are allowed to be alerted again. Everyone else is skipped,

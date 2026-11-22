@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from config import WAVE_RADII_KM
 from database import get_db
 from models import Alert, BloodRequest, Donor
-from rules.compatibility import COMPATIBLE_DONORS
+from rules.compatibility import COMPATIBLE_DONORS, COMPONENTS
 from security import get_current_phone
 from selection import mark_arrived, mark_no_show, resolve_request
 from waves import send_wave
@@ -21,6 +21,7 @@ class RequestForm(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     urgency: str = "high"                 # critical / high / normal
+    component: str = "whole_blood"        # whole_blood / rbc
 
 
 def _get_my_request(db: Session, request_id: int, phone: str) -> BloodRequest:
@@ -50,17 +51,20 @@ def create_request(
     """A receiver asks for blood. Wave 1 (15 km) is alerted straight away."""
     group = form.blood_group.strip().upper()
     urgency = form.urgency.strip().lower()
+    component = form.component.strip().lower()
 
     if group not in COMPATIBLE_DONORS:
         raise HTTPException(status_code=400, detail="Unknown blood group")
     if urgency not in ("critical", "high", "normal"):
         raise HTTPException(status_code=400, detail="urgency must be critical, high or normal")
+    if component not in COMPONENTS:
+        raise HTTPException(status_code=400, detail="component must be whole_blood or rbc")
 
     req = BloodRequest(
         receiver_phone=phone,
         receiver_name=form.receiver_name.strip(),
         blood_group=group,
-        component="whole_blood",
+        component=component,
         units_needed=form.units_needed,
         hospital=form.hospital.strip(),
         latitude=form.latitude,
@@ -80,9 +84,69 @@ def create_request(
         "request_id": req.id,
         "status": req.status,
         "radius_km": req.current_radius_km,
+        "component": req.component,
         "alerted_count": len(wave),
         "alerted_distances_km": [round(d, 1) for _donor, d in wave],
     }
+
+
+@router.get("/mine")
+def my_requests(
+    phone: str = Depends(get_current_phone),
+    db: Session = Depends(get_db),
+):
+    """All requests made by this receiver, newest first (history screen).
+
+    Each request lists the donors who helped (confirmed or arrived), so the
+    receiver can contact them in future. Other donors are never shown.
+    """
+    requests = (
+        db.query(BloodRequest)
+        .filter(BloodRequest.receiver_phone == phone)
+        .order_by(BloodRequest.created_at.desc())
+        .all()
+    )
+    request_ids = [r.id for r in requests]
+
+    helped = {}  # request_id -> list of donors who helped
+    if request_ids:
+        alerts = (
+            db.query(Alert)
+            .filter(
+                Alert.request_id.in_(request_ids),
+                Alert.response.in_(("confirmed", "arrived")),
+            )
+            .all()
+        )
+        for a in alerts:
+            donor = db.query(Donor).filter(Donor.id == a.donor_id).first()
+            if donor is None:   # the donor deleted their account
+                continue
+            helped.setdefault(a.request_id, []).append({
+                "name": donor.name,
+                "phone": donor.phone,
+                "blood_group": donor.blood_group,
+                "city": donor.city,
+                "donated": a.response == "arrived",
+            })
+
+    return [
+        {
+            "request_id": r.id,
+            "receiver_name": r.receiver_name,
+            "blood_group": r.blood_group,
+            "component": r.component,
+            "units_needed": r.units_needed,
+            "units_found": r.units_accepted,
+            "hospital": r.hospital,
+            "urgency": r.urgency,
+            "status": r.status,
+            "radius_km": r.current_radius_km,
+            "created_at": r.created_at.isoformat(),
+            "donors_who_helped": helped.get(r.id, []),
+        }
+        for r in requests
+    ]
 
 
 @router.get("/{request_id}/status")
@@ -123,6 +187,7 @@ def request_status(
         "status": req.status,
         "still_searching": req.status == "open",
         "blood_group": req.blood_group,
+        "component": req.component,
         "hospital": req.hospital,
         "units_needed": req.units_needed,
         "units_found": req.units_accepted,

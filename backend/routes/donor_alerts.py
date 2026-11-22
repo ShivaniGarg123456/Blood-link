@@ -53,6 +53,7 @@ def _view(db: Session, alert: Alert) -> dict:
         "response": alert.response,
         "message": MESSAGES.get(alert.response, ""),
         "blood_group": req.blood_group,
+        "component": req.component,
         "units_needed": req.units_needed,
         "hospital": req.hospital,
         "urgency": req.urgency,
