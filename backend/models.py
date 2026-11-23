@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, Date, DateTime, ForeignKey
 from database import Base
 
 
@@ -13,12 +13,15 @@ class Donor(Base):
     city = Column(String, nullable=False)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
-    age = Column(Integer, nullable=False)
+    date_of_birth = Column(Date, nullable=False)      # age is calculated from this
     sex = Column(String, nullable=False)              # male / female
     weight_kg = Column(Float, nullable=False)
     blood_group = Column(String, nullable=False)      # e.g. B-
     component = Column(String, default="whole_blood") # prototype: whole blood only
     last_donation_date = Column(Date, nullable=True)
+
+    # The donor's own switch: "I am available for alerts"
+    available = Column(Boolean, default=True, nullable=False)
 
     # Only the RESULT of the eligibility rules is stored, not disease details
     status = Column(String, default="not_active")     # active / not_active / paused
@@ -56,10 +59,11 @@ class Alert(Base):
     donor_id = Column(Integer, ForeignKey("donors.id"), nullable=False)
     wave_radius_km = Column(Integer, default=15)
     distance_km = Column(Float, nullable=True)       # donor's distance from the hospital
-    responded_at = Column(DateTime, nullable=True)   # when the donor accepted or declined
     sent_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
-    # pending / accepted / arrived / no_show / declined / expired
+    responded_at = Column(DateTime, nullable=True)   # when the donor accepted or declined
+    # pending / accepted / confirmed / standby / declined / expired / cancelled /
+    # cant_come / no_show / checkup_failed / donated
     response = Column(String, default="pending")
     progress = Column(String, nullable=True)         # on_the_way / arrived (donor's own updates)
-    progress_at = Column(DateTime, nullable=True)    # when the donor last updated
+    progress_at = Column(DateTime, nullable=True)

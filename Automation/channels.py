@@ -2,6 +2,7 @@
 WhatsApp later means adding one class here. Only Telegram + the in-app alert page are built."""
 import json
 import threading
+import urllib.error
 import urllib.request
 import uuid
 from dataclasses import dataclass
@@ -42,8 +43,11 @@ class Channel:
 
 def default_http(url, data=None, headers=None, timeout=10):
     req = urllib.request.Request(url, data=data, headers=headers or {}, method="POST" if data is not None else "GET")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.status, resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as e:   # keep Telegram's own explanation instead of a bare "400"
+        return e.code, e.read()
 
 
 def build_multipart(fields: dict, file_field: str, path: str, mime="audio/mpeg"):
@@ -96,8 +100,9 @@ class TelegramChannel(Channel):
                 fields["reply_markup"] = json.dumps(kb)
             body, ctype = build_multipart(fields, "audio", msg.audio_path)
             _, raw = self.http(f"{self.base}/sendAudio", body, {"Content-Type": ctype}, 30)
-            if not json.loads(raw).get("ok"):
-                raise RuntimeError("sendAudio failed")
+            reply = json.loads(raw)
+            if not reply.get("ok"):
+                raise RuntimeError(reply.get("description", "sendAudio failed"))
         else:
             payload = {"chat_id": party.chat_id, "text": msg.text}
             if kb:

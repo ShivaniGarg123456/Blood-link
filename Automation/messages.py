@@ -88,15 +88,22 @@ TEXT["closed"] = {
     "en": "This alert is no longer open. Thank you!",
     "hi": "यह अलर्ट अब खुला नहीं है। धन्यवाद!"}
 TEXT["language_set"] = {"en": "Language set to English.", "hi": "भाषा हिंदी कर दी गई है।"}
+TEXT["standby_backup"] = {
+    "en": "Thank you for accepting! You are on standby: if a selected donor cannot come, we will contact you first.",
+    "hi": "स्वीकार करने के लिए धन्यवाद! आप बैकअप में हैं: अगर चुना गया डोनर नहीं आ पाया तो हम सबसे पहले आपसे संपर्क करेंगे।"}
 
 
 def describe_response(view, lang="en", confirm_seconds=15):
-    """One plain line for the state of a donor's alert. `view` is a dict with the key `response`."""
+    """One plain line for the state of a donor's alert. `view` is a dict with the key `response`.
+    For standby, `view["request_status"]` decides the wording: still searching -> "you are the backup",
+    otherwise -> "the need is fulfilled for now"."""
     r = view.get("response")
     if r in ("confirmed", "arrived"):
         return render("confirmed_donor", lang, receiver_name=view.get("receiver_name", ""),
                       receiver_phone=view.get("receiver_phone", ""), hospital=view.get("hospital", ""))
     if r == "standby":
+        if view.get("request_status") == "open":
+            return render("standby_backup", lang)
         return render("standby", lang)
     if r == "accepted":
         return render("tentative", lang, n=confirm_seconds)

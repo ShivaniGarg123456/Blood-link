@@ -54,7 +54,7 @@ audio_dir = os.getenv("AUDIO_DIR") or os.path.join(os.path.dirname(__file__), "a
 tts = GTTS(audio_dir) if os.getenv("ENABLE_TTS", "1") == "1" else NullTTS()
 worker = Worker(bridge, store, channels, secret=SECRET, base_url=BASE_URL, tts=tts,
                 default_language=DEFAULT_LANGUAGE, receiver_chat_ids=RECEIVER_CHAT_IDS,
-                run_scheduler=os.getenv("RUN_SCHEDULER", "1") == "1", confirm_seconds=CONFIRM_SECONDS)
+                run_scheduler=os.getenv("RUN_SCHEDULER", "0") == "1", confirm_seconds=CONFIRM_SECONDS)
 
 _started = False
 
