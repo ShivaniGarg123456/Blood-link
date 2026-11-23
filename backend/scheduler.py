@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -8,12 +8,25 @@ from sqlalchemy.orm import Session
 from config import REQUEST_MAX_HOURS, next_radius
 from database import SessionLocal
 from matching import wave_is_finished
-from models import Alert, BloodRequest
+from models import Alert, BloodRequest, Donor
+from rules.eligibility import refresh_donor_status
 from selection import resolve_request
 from waves import send_wave
 
 # How often the scheduler checks all open requests
 TICK_SECONDS = int(os.getenv("SCHEDULER_TICK_SECONDS", "5"))
+
+
+def daily_donor_check(db: Session, today: Optional[date] = None) -> int:
+    """Once a day: donors who passed 65 become not_active, and paused donors
+    whose waiting period is over become active again. Returns how many changed."""
+    today = today or date.today()
+    changed = 0
+    for donor in db.query(Donor).all():
+        if refresh_donor_status(donor, today):
+            changed += 1
+    db.commit()
+    return changed
 
 
 def tick(db: Session, now: Optional[datetime] = None) -> dict:
@@ -54,7 +67,7 @@ def tick(db: Session, now: Optional[datetime] = None) -> dict:
         if req.status != "open":
             continue
 
-        # Is the current wave over? (3 minutes passed, or everyone declined)
+        # Is the current wave over? (timer passed, or everyone declined)
         radius = req.current_radius_km
         if not wave_is_finished(db, req, radius, now):
             continue
@@ -76,10 +89,16 @@ def tick(db: Session, now: Optional[datetime] = None) -> dict:
 async def run_forever() -> None:
     """Runs in the background while the server is on."""
     print(f"Scheduler started, checking every {TICK_SECONDS} seconds")
+    last_daily_check = None
     while True:
         try:
             db = SessionLocal()
             try:
+                today = date.today()
+                if last_daily_check != today:       # once a day (and once at start-up)
+                    changed = daily_donor_check(db, today)
+                    last_daily_check = today
+                    print(f"Daily donor check done, {changed} donor(s) updated")
                 tick(db)
             finally:
                 db.close()

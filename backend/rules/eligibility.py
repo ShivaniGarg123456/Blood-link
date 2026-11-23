@@ -30,6 +30,15 @@ TEMPORARY_CONDITIONS = {
 }
 
 
+def age_from_dob(dob: date, today: date = None) -> int:
+    """Age in whole years. It grows by itself every birthday."""
+    today = today or date.today()
+    years = today.year - dob.year
+    if (today.month, today.day) < (dob.month, dob.day):
+        years -= 1
+    return years
+
+
 def check_eligibility(age, weight_kg, sex, last_donation_date=None,
                       conditions=None, today=None):
     """Return {"status", "reason", "eligible_after"}.
@@ -53,9 +62,10 @@ def check_eligibility(age, weight_kg, sex, last_donation_date=None,
 
     for c in conditions:
         if c in PERMANENT_CONDITIONS:
-                        return _result("not_eligible",
+            return _result("not_eligible",
                            "You can't donate because of a medical condition. "
                            "Please talk to a doctor.")
+
     # Find the latest date the donor becomes eligible again
     wait_until = None
     reason = ""
@@ -77,6 +87,33 @@ def check_eligibility(age, weight_kg, sex, last_donation_date=None,
         return _result("eligible_after", reason, wait_until)
 
     return _result("eligible", "You can donate. The hospital will do the final check.")
+
+
+def refresh_donor_status(donor, today: date = None) -> bool:
+    """Daily housekeeping for one donor. Returns True if something changed.
+
+    - a donor who passed 65 becomes not_active
+    - a paused donor whose waiting period is over becomes active again
+    (health conditions are not stored, so they are never re-checked here)
+    """
+    today = today or date.today()
+    age = age_from_dob(donor.date_of_birth, today)
+
+    if age > MAX_AGE:
+        if donor.status != "not_active":
+            donor.status = "not_active"
+            donor.reason = f"Donors must be {MAX_AGE} or younger."
+            donor.eligible_after = None
+            return True
+        return False
+
+    if donor.status == "paused" and donor.eligible_after and donor.eligible_after <= today:
+        donor.status = "active"
+        donor.reason = "You can donate. The hospital will do the final check."
+        donor.eligible_after = None
+        return True
+
+    return False
 
 
 def _result(status, reason, eligible_after=None):

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from database import Base, engine, SessionLocal
 import models  # noqa: F401
@@ -34,6 +34,7 @@ SEED_DONORS = [
 def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    today = date.today()
     try:
         # Remove old demo donors (phones starting with 90000), then add fresh ones
         db.query(Donor).filter(Donor.phone.like("90000%")).delete(synchronize_session=False)
@@ -42,9 +43,11 @@ def main():
         for phone, name, area, lat, lon, group, sex, age, weight, status, reason in SEED_DONORS:
             db.add(Donor(
                 phone=phone, name=name, state="Delhi NCR", city=area,
-                latitude=lat, longitude=lon, age=age, sex=sex, weight_kg=weight,
+                latitude=lat, longitude=lon,
+                date_of_birth=date(today.year - age, 1, 1),   # gives exactly this age today
+                sex=sex, weight_kg=weight,
                 blood_group=group, component="whole_blood",
-                last_donation_date=None, status=status,
+                last_donation_date=None, available=True, status=status,
                 reason=reason or "You can donate. The hospital will do the final check.",
                 eligible_after=None, consent_given_at=datetime.utcnow(),
             ))
