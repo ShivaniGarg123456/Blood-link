@@ -32,6 +32,7 @@ def _snap(alert, donor, req):
         "distance_km": round(alert.distance_km, 1) if alert.distance_km is not None else 0.0,
         "blood_group": req.blood_group, "component": req.component, "hospital": req.hospital,
         "urgency": req.urgency, "receiver_name": req.receiver_name, "receiver_phone": req.receiver_phone,
+        "request_status": req.status,
     }
 
 
