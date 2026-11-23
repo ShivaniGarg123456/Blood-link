@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import Base, engine
 import models  # noqa: F401
 import scheduler
-from routes import auth, donors, blood_requests, donor_alerts
+from routes import auth, donors, blood_requests, donor_alerts, geo
 
 Base.metadata.create_all(bind=engine)
 
@@ -33,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(donors.router)
 app.include_router(donor_alerts.router)
 app.include_router(blood_requests.router)
+app.include_router(geo.router)
 
 
 @app.get("/")

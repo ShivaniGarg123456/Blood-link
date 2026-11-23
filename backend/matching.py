@@ -12,8 +12,9 @@ def find_donors_for_wave(db: Session, request: BloodRequest, radius_km: int):
     """Return (donor, distance_km) pairs to alert in this wave, nearest first.
 
     Rules:
-    - donor must be active
+    - donor must be active, and must have the "available" switch ON
     - donor's blood group must be compatible with the receiver's group
+      for the requested component (whole blood or RBC)
     - donor must be within radius_km of the hospital
     - donor must NOT have been alerted already for this request,
       so growing the radius never alerts the same person twice
@@ -21,7 +22,7 @@ def find_donors_for_wave(db: Session, request: BloodRequest, radius_km: int):
     """
     groups = compatible_donors(request.blood_group, request.component)
 
-        # Donors whose alert was only cancelled (the need was fulfilled before they
+    # Donors whose alert was only cancelled (the need was fulfilled before they
     # could answer) are allowed to be alerted again. Everyone else is skipped,
     # so nobody is spammed twice.
     already_alerted = {
@@ -34,6 +35,7 @@ def find_donors_for_wave(db: Session, request: BloodRequest, radius_km: int):
     candidates = (
         db.query(Donor)
         .filter(Donor.status == "active")
+        .filter(Donor.available.is_(True))
         .filter(Donor.blood_group.in_(groups))
         .filter(Donor.phone != request.receiver_phone)
         .all()
@@ -61,7 +63,7 @@ def wave_is_finished(
 
     A wave is over when nobody in it can still accept:
     - everyone declined or let their alert expire (do not wait for the clock), or
-    - the 3-minute timer ran out (pending alerts past expires_at count as expired).
+    - the timer ran out (pending alerts past expires_at count as expired).
     A wave with nobody in it is over straight away.
     """
     now = now or datetime.utcnow()
