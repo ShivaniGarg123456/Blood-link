@@ -1,37 +1,41 @@
-from services.request_parser import parse_blood_request
+from AI.services.request_parser import parse_blood_request
 
 
-# Test Case 1: English request
-request1 = parse_blood_request(
-    "Need 2 units B+ blood urgently at AIIMS Delhi"
-)
+def test_english_request():
+    result = parse_blood_request(
+        "Need 2 units B+ blood urgently at AIIMS Delhi"
+    )
 
-print("\nTest Case 1:")
-print(request1)
-
-
-# Test Case 2: Emergency request
-request2 = parse_blood_request(
-    "Need 3 units O- blood immediately at Apollo Hospital"
-)
-
-print("\nTest Case 2:")
-print(request2)
+    assert result.blood_group == "B+"
+    assert result.units == 2
+    assert result.hospital is not None
 
 
-# Test Case 3: Missing information
-request3 = parse_blood_request(
-    "Need blood urgently"
-)
+def test_emergency_request():
+    result = parse_blood_request(
+        "Need 3 units O- blood immediately at Apollo Hospital"
+    )
 
-print("\nTest Case 3:")
-print(request3)
+    assert result.blood_group == "O-"
+    assert result.units == 3
+    assert result.urgency == "critical"
 
 
-# Test Case 4: Hindi/Hinglish request
-request4 = parse_blood_request(
-    "Mujhe 2 units A+ khoon chahiye AIIMS Delhi mein"
-)
+def test_missing_information():
+    result = parse_blood_request(
+        "Need blood urgently"
+    )
 
-print("\nTest Case 4:")
-print(request4)
+    assert result.blood_group is None
+    assert result.units is None
+    assert result.missing_fields
+
+
+def test_hindi_request():
+    result = parse_blood_request(
+        "Mujhe 2 units A+ khoon chahiye AIIMS Delhi mein"
+    )
+
+    assert result.blood_group == "A+"
+    assert result.units == 2
+    assert result.language == "hi"
