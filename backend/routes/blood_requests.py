@@ -9,11 +9,30 @@ from rules.compatibility import COMPATIBLE_DONORS, COMPONENTS
 from security import get_current_phone
 from selection import mark_checkup_failed, mark_donated, mark_no_show, resolve_request
 from waves import send_wave
+from AI.services.llm_parser import parse_blood_request_llm
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
 
+
 # Donors the receiver is allowed to see (confirmed, or already helped)
 HELPER_STATES = ("confirmed", "arrived", "donated")
+
+
+class ParseRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/parse")
+def parse_request_text(form: ParseRequest):
+    """
+    Converts natural-language blood requests into structured data.
+    """
+    result = parse_blood_request_llm(form.text)
+
+    return {
+        **result.model_dump(),
+        "is_complete": len(result.missing_fields) == 0
+    }
 
 
 class RequestForm(BaseModel):
