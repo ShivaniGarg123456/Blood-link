@@ -19,7 +19,7 @@ import threading
 import time
 
 from fastapi import Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from main import app                       # backend/main.py, untouched
 from security import get_current_phone     # backend login (JWT)
@@ -133,3 +133,16 @@ def accept_action(token: str):
     lang = store.language(snap["donor_id"]) or DEFAULT_LANGUAGE
     text, _ = respond(bridge, store, aid, "acc", lang, CONFIRM_SECONDS)
     return HTMLResponse(_page("BloodLink", f"<p>{html.escape(text)}</p>"))
+
+
+WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
+
+
+@app.get("/automation/siren.js")
+def siren_js():
+    return FileResponse(os.path.join(WEB_DIR, "siren.js"), media_type="application/javascript")
+
+
+@app.get("/automation/siren-test")
+def siren_test():
+    return FileResponse(os.path.join(WEB_DIR, "test.html"), media_type="text/html")
