@@ -1,3 +1,5 @@
+
+import { Link } from "react-router-dom";
 import "../App.css";
 
 function Home() {
@@ -6,21 +8,21 @@ function Home() {
 
       {/* Navigation */}
       <header className="navbar">
-        <a href="#" className="brand">
+        <Link to="/" className="brand">
           <span className="brand-icon">♥</span>
           <span>Blood<span className="brand-highlight">Link</span></span>
-        </a>
+        </Link>
 
         <nav className="nav-links">
-          <a href="#home">Home</a>
+          <Link to="/">Home</Link>
           <a href="#how-it-works">How it works</a>
-          <a href="#donors">For Donors</a>
+          <Link to="/donor">For Donors</Link>
           <a href="#about">About us</a>
         </nav>
 
         <div className="nav-actions">
-          <a href="#receiver" className="login-link">Log in</a>
-          <a href="#receiver" className="nav-button">Get Started</a>
+          <Link to="/login" className="login-link">Log in</Link>
+          <Link to="/signup" className="nav-button">Get Started</Link>
         </div>
       </header>
 
@@ -46,13 +48,13 @@ function Home() {
             </p>
 
             <div className="hero-buttons">
-              <a href="#receiver" className="primary-button">
+              <Link to="/receiver" className="primary-button">
                 Request Blood <span>→</span>
-              </a>
+              </Link>
 
-              <a href="#donors" className="secondary-button">
+              <Link to="/donor" className="secondary-button">
                 Become a Donor
-              </a>
+              </Link>
             </div>
 
             <div className="hero-note">
@@ -106,7 +108,7 @@ function Home() {
               <p>
                 Create your donor profile and complete the pre-screening form.
               </p>
-              <a href="#donors">Join as donor →</a>
+              <Link to="/donor">Join as donor →</Link>
             </article>
 
             <article className="feature-card">
@@ -115,7 +117,7 @@ function Home() {
               <p>
                 Send a blood request and connect with compatible donors nearby.
               </p>
-              <a href="#receiver">Request blood →</a>
+              <Link to="/receiver">Request blood →</Link>
             </article>
 
             <article className="feature-card">
@@ -124,7 +126,7 @@ function Home() {
               <p>
                 Follow request updates and stay informed throughout the process.
               </p>
-              <a href="#receiver">Explore platform →</a>
+              <Link to="/receiver">Explore platform →</Link>
             </article>
           </div>
         </section>
@@ -140,9 +142,9 @@ function Home() {
             </p>
           </div>
 
-          <a href="#receiver" className="cta-button">
+          <Link to="/signup" className="cta-button">
             Get Started →
-          </a>
+          </Link>
         </section>
 
         {/* Receiver Section */}
@@ -156,18 +158,18 @@ function Home() {
             </p>
           </div>
 
-          <a href="#home" className="primary-button">
+          <Link to="/receiver" className="primary-button">
             Start a Request →
-          </a>
+          </Link>
         </section>
       </main>
 
       {/* Footer */}
       <footer className="footer" id="about">
-        <a href="#home" className="brand footer-brand">
+        <Link to="/" className="brand footer-brand">
           <span className="brand-icon">♥</span>
           <span>Blood<span className="brand-highlight">Link</span></span>
-        </a>
+        </Link>
 
         <p>Connecting lives, one donation at a time.</p>
         <span className="copyright">
@@ -176,7 +178,7 @@ function Home() {
       </footer>
 
     </div>
-  )
+  );
 }
 
 export default Home;
